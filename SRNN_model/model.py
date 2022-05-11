@@ -10,10 +10,10 @@ import tensorflow as tf
 from tensorflow.python.framework import function
 from tensorflow.python.framework.ops import Tensor
 
-if LooseVersion(tf.__version__) >= LooseVersion("1.11"):
+if LooseVersion(tf.__version__) >= LooseVersion("2.8"):
     from tensorflow.python.ops.variables import Variable, RefVariable
 else:
-    print("Using tensorflow version older then 1.11 -> skipping RefVariable storing")
+    print("Using tensorflow version older then 2.8.0 -> skipping RefVariable storing")
     from tensorflow.python.ops.variables import Variable
 
 from lsnn.toolbox.rewiring_tools import weight_sampler
@@ -26,20 +26,40 @@ Cell = tf.contrib.rnn.BasicRNNCell
 
 
 def placeholder_container_for_rnn_state(cell_state_size, dtype, batch_size, name='TupleStateHolder'):
+    '''Create a tuple as container for RNN states.
+    Input Args:
+        cell_state_size : a named tuple
+        dtype : data type of the states
+        batch_size : int
+    Returns:
+        placeholder_tuple : a tuple to hold places for RNN states
+    '''
     with tf.name_scope(name):
-        default_dict = cell_state_size._asdict()
-        placeholder_dict = OrderedDict({})
-        for k, v in default_dict.items():
-            if np.shape(v) == ():
+        default_dict = cell_state_size._asdict() # convert the named tuple 'cell_state_size' into a python dict instance
+        placeholder_dict = OrderedDict({}) # create a OrderedDict which is a python dict that preserves the order in which the keys are inserted. 
+        for k, v in default_dict.items(): # k - key, v - value
+            # if v is not a list, convert that v to a list
+            if np.shape(v) == (): 
                 v = [v]
-            shape = np.concatenate([[batch_size], v])
+            shape = np.concatenate([[batch_size], v]) # the shape of each layer?
             placeholder_dict[k] = tf.placeholder(shape=shape, dtype=dtype, name=k)
-
+        # **d means "treat the key-value pairs in the dictionary as additional named arguments to this function call."
+        # def foo(x, y):
+        #     print(x, y)
+        #>>> d = {'x':1, 'y':2}
+        # >>> foo(**d)
+        # 1 2
         placeholder_tuple = cell_state_size.__class__(**placeholder_dict)
         return placeholder_tuple
 
 
 def feed_dict_with_placeholder_container(dict_to_update, state_holder, state_value, batch_selection=None):
+    '''Update the dictionary 'dict_to_update'
+    Input Args:
+        dict_to_update : the dictonary to be updated
+    Returns:
+        dict_to_update : the updated dictonary
+    '''
     if state_value is None:
         return dict_to_update
 
@@ -48,7 +68,7 @@ def feed_dict_with_placeholder_container(dict_to_update, state_holder, state_val
 
     for k, v in state_value._asdict().items():
         if batch_selection is None:
-            dict_to_update.update({state_holder._asdict()[k]: v})
+            dict_to_update.update({state_holder._asdict()[k]: v}) # convert the state_holder as a dict and create the k-v pair
         else:
             dict_to_update.update({state_holder._asdict()[k]: v[batch_selection]})
 
@@ -59,21 +79,26 @@ def feed_dict_with_placeholder_container(dict_to_update, state_holder, state_val
 # Spike function
 #################################
 
-@tf.custom_gradient
+@tf.custom_gradient # Decorator to define a function with a custom gradient.
 def SpikeFunction(v_scaled, dampening_factor):
-    z_ = tf.greater(v_scaled, 0.)
-    z_ = tf.cast(z_, dtype=tf.float32)
+    z_ = tf.math.greater(v_scaled, 0.) # returns the truth/flase value of (x > y) element-wise.
+    z_ = tf.cast(z_, dtype=tf.float32) # cast z to data type of float32, i.e., true - 1.0, false - 0.0
 
-    def grad(dy):
-        dE_dz = dy
-        dz_dv_scaled = tf.maximum(1 - tf.abs(v_scaled), 0)
-        dz_dv_scaled *= dampening_factor
+    def grad(dy): 
+        # calculate the gradient for BPTT
+        dE_dz = dy # What is E here?
+        dz_dv_scaled = tf.math.maximum(1 - tf.abs(v_scaled), 0)
+        dz_dv_scaled *= dampening_factor # dampening_factor = 0.3 in NIPS 2018 
 
         dE_dv_scaled = dE_dz * dz_dv_scaled
 
         return [dE_dv_scaled,
-                tf.zeros_like(dampening_factor)]
-
+                tf.zeros_like(dampening_factor)] 
+        # tf.zeros_like(dampening_factor) - a tensor with shape of 'dampening_factor'.
+    
+    # STDP should be inserted here!!!!!
+    
+    # tf.identity : Return a Tensor with the same shape and contents as input.
     return tf.identity(z_, name="SpikeFunction"), grad
 
 
