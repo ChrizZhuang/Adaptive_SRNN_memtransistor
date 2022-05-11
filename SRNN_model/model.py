@@ -80,15 +80,17 @@ def feed_dict_with_placeholder_container(dict_to_update, state_holder, state_val
 #################################
 
 @tf.custom_gradient # Decorator to define a function with a custom gradient.
+
+# STDP should be inserted in this function!!!!!
 def SpikeFunction(v_scaled, dampening_factor):
     z_ = tf.math.greater(v_scaled, 0.) # returns the truth/flase value of (x > y) element-wise.
     z_ = tf.cast(z_, dtype=tf.float32) # cast z to data type of float32, i.e., true - 1.0, false - 0.0
 
     def grad(dy): 
         # calculate the gradient for BPTT
-        dE_dz = dy # What is E here?
+        dE_dz = dy # E - error
         dz_dv_scaled = tf.math.maximum(1 - tf.abs(v_scaled), 0)
-        dz_dv_scaled *= dampening_factor # dampening_factor = 0.3 in NIPS 2018 
+        dz_dv_scaled *= dampening_factor # dampening_factor = 0.3 for sequantial MNIST in NIPS 2018 
 
         dE_dv_scaled = dE_dz * dz_dv_scaled
 
@@ -97,7 +99,7 @@ def SpikeFunction(v_scaled, dampening_factor):
         # tf.zeros_like(dampening_factor) - a tensor with shape of 'dampening_factor'.
     
     # STDP should be inserted here!!!!!
-    
+
     # tf.identity : Return a Tensor with the same shape and contents as input.
     return tf.identity(z_, name="SpikeFunction"), grad
 
@@ -105,17 +107,18 @@ def SpikeFunction(v_scaled, dampening_factor):
 def weight_matrix_with_delay_dimension(w, d, n_delay):
     """
     Generate the tensor of shape n_in x n_out x n_delay that represents the synaptic weights with the right delays.
+    Use for e-prop as an alternative of BPTT
     :param w: synaptic weight value, float tensor of shape (n_in x n_out)
     :param d: delay number, int tensor of shape (n_in x n_out)
     :param n_delay: number of possible delays
-    :return:
+    :return: WD
     """
-    with tf.name_scope('WeightDelayer'):
+    with tf.name_scope('WeightDelayer'): 
         w_d_list = []
         for kd in range(n_delay):
-            mask = tf.equal(d, kd)
-            w_d = tf.where(condition=mask, x=w, y=tf.zeros_like(w))
-            w_d_list.append(w_d)
+            mask = tf.math.equal(d, kd) # Returns the truth value of (d == kd) element-wise.
+            w_d = tf.where(condition=mask, x=w, y=tf.zeros_like(w)) # Returns the indices that meets the 'mask' condition.
+            w_d_list.append(w_d) 
 
         delay_axis = len(d.shape)
         WD = tf.stack(w_d_list, axis=delay_axis)
@@ -123,14 +126,14 @@ def weight_matrix_with_delay_dimension(w, d, n_delay):
     return WD
 
 
-# PSP on output layer
+# PSP on output layer - probably used in alternative BPTT paper
 def exp_convolve(tensor, decay):  # tensor shape (trial, time, neuron)
     with tf.name_scope('ExpConvolve'):
         assert tensor.dtype in [tf.float16, tf.float32, tf.float64]
-
-        tensor_time_major = tf.transpose(tensor, perm=[1, 0, 2])
+        # tensor here is a 3D tensor, perm is used to specify the way of transpose
+        tensor_time_major = tf.transpose(tensor, perm=[1, 0, 2]) 
         initializer = tf.zeros_like(tensor_time_major[0])
-
+        # tf. scan - scan on the list of tensors unpacked from elems of 'tensor_time_major' on dimension 0.
         filtered_tensor = tf.scan(lambda a, x: a * decay + (1 - decay) * x, tensor_time_major, initializer=initializer)
         filtered_tensor = tf.transpose(filtered_tensor, perm=[1, 0, 2])
     return filtered_tensor
@@ -157,7 +160,7 @@ def tf_cell_to_savable_dict(cell, sess, supplement={}):
     dict_to_save.update(supplement)
 
     tftypes = [Variable, Tensor]
-    if LooseVersion(tf.__version__) >= LooseVersion("1.11"):
+    if LooseVersion(tf.__version__) >= LooseVersion("2.8"):
         tftypes.append(RefVariable)
 
     for k, v in cell.__dict__.items():
@@ -190,7 +193,7 @@ class LIF(Cell):
         :param dt: time step of the simulation
         :param n_refractory: number of refractory time steps
         :param dtype: data type of the cell tensors
-        :param n_delay: number of synaptic delay, the delay range goes from 1 to n_delay time steps
+        :param n_delay: number of synaptic delay timestep, the delay range goes from 1 to n_delay time steps
         :param reset: method of resetting membrane potential after spike thr-> by fixed threshold amount, zero-> to zero
         """
 
@@ -212,23 +215,24 @@ class LIF(Cell):
 
         self._num_units = self.n_rec
 
-        self.tau = tf.Variable(tau, dtype=dtype, name="Tau", trainable=False)
-        self._decay = tf.exp(-dt / tau)
-        self.thr = tf.Variable(thr, dtype=dtype, name="Threshold", trainable=False)
+        self.tau = tf.Variable(tau, dtype=dtype, name="Tau", trainable=False) # trainable=False, set tau as a constant
+        self._decay = tf.exp(-dt / tau) # the alpha value in membrane voltage update equation
+        self.thr = tf.Variable(thr, dtype=dtype, name="Threshold", trainable=False) 
 
-        self.V0 = V0
-        self.injected_noise_current = injected_noise_current
+        self.V0 = V0 # initial membrane voltage
+        self.injected_noise_current = injected_noise_current # add some random noises
 
-        self.rewiring_connectivity = rewiring_connectivity
-        self.in_neuron_sign = in_neuron_sign
-        self.rec_neuron_sign = rec_neuron_sign
+        self.rewiring_connectivity = rewiring_connectivity 
+        self.in_neuron_sign = in_neuron_sign # input current from former layer
+        self.rec_neuron_sign = rec_neuron_sign # recurrent current from recurrent neurons of current layer
 
         with tf.variable_scope('InputWeights'):
 
             # Input weights
             if 0 < rewiring_connectivity < 1:
+                # weight_sampler from rewiring tool
                 self.w_in_val, self.w_in_sign, self.w_in_var, _ = weight_sampler(n_in, n_rec, rewiring_connectivity,
-                                                                                 neuron_sign=in_neuron_sign)
+                                                                                 neuron_sign=in_neuron_sign) 
             else:
                 self.w_in_var = tf.Variable(rd.randn(n_in, n_rec) / np.sqrt(n_in), dtype=dtype, name="InputWeight")
                 self.w_in_val = self.w_in_var
@@ -321,7 +325,7 @@ class LIF(Cell):
         """
 
         if self.injected_noise_current > 0:
-            add_current = tf.random_normal(shape=z.shape, stddev=self.injected_noise_current)
+            add_current = tf.random_normal(shape=z.shape, stddev=self.injected_noise_current) # add random noise to current
 
         with tf.name_scope('LIFdynamic'):
             if thr is None: thr = self.thr
@@ -330,15 +334,16 @@ class LIF(Cell):
 
             i_t = i_future_buffer[:, :, 0] + add_current
 
-            I_reset = z * thr * self.dt
+            I_reset = z * thr * self.dt # thr is fixed for LIF neuron, but changable for ALIF neuron. 
 
-            new_v = decay * v + (1 - decay) * i_t - I_reset
+            new_v = decay * v + (1 - decay) * i_t - I_reset # the membrane voltage at t+dt
 
             # Spike generation
             v_scaled = (v - thr) / thr
 
             # new_z = differentiable_spikes(v_scaled=v_scaled)
-            new_z = SpikeFunction(v_scaled, self.dampening_factor)
+            new_z = SpikeFunction(v_scaled, self.dampening_factor) # update the z value
+            # return tf.identity(z_, name="SpikeFunction"), grad
 
             if n_refractory > 0:
                 is_ref = tf.greater(tf.reduce_max(z_buffer[:, :, -n_refractory:], axis=2), 0)
@@ -346,7 +351,7 @@ class LIF(Cell):
 
             new_z = new_z * 1 / self.dt
 
-            return new_v, new_z
+            return new_v, new_z # return the new membrane voltage, and new input spike train
 
 
 ALIFStateTuple = namedtuple('ALIFState', (
@@ -398,7 +403,7 @@ class ALIF(LIF):
         self.tau_adaptation = tf.Variable(tau_adaptation, dtype=dtype, name="TauAdaptation", trainable=False)
 
         self.beta = tf.Variable(beta, dtype=dtype, name="Beta", trainable=False)
-        self.decay_b = np.exp(-dt / tau_adaptation)
+        self.decay_b = np.exp(-dt / tau_adaptation) #pj in the equation
 
     @property
     def output_size(self):
@@ -435,9 +440,9 @@ class ALIF(LIF):
             i_future_buffer = state.i_future_buffer + einsum_bi_ijk_to_bjk(inputs, self.W_in) + einsum_bi_ijk_to_bjk(
                 state.z, self.W_rec)
 
-            new_b = self.decay_b * state.b + (1. - self.decay_b) * state.z
+            new_b = self.decay_b * state.b + (1. - self.decay_b) * state.z # equation of bj(t+delta_t)
 
-            thr = self.thr + new_b * self.beta * self.V0
+            thr = self.thr + new_b * self.beta * self.V0 # the threshold voltage is changable for ALIF neuron
 
             new_v, new_z = self.LIF_dynamic(
                 v=state.v,
@@ -457,7 +462,7 @@ class ALIF(LIF):
                                        z_buffer=new_z_buffer)
         return [new_z, new_v, thr], new_state
 
-
+# 2022/05/10
 def static_rnn_with_gradient(cell, inputs, state, loss_function, T, verbose=True):
     batch_size = tf.shape(inputs)[0]
 
