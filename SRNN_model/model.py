@@ -462,10 +462,10 @@ class ALIF(LIF):
                                        z_buffer=new_z_buffer)
         return [new_z, new_v, thr], new_state
 
-# 2022/05/10
+
 def static_rnn_with_gradient(cell, inputs, state, loss_function, T, verbose=True):
     batch_size = tf.shape(inputs)[0]
-
+    # create empty lists to store values of RNN network
     thr_list = []
     state_list = []
     z_list = []
@@ -473,15 +473,15 @@ def static_rnn_with_gradient(cell, inputs, state, loss_function, T, verbose=True
 
     if verbose: print('Building forward Graph...', end=' ')
     t0 = time()
-    for t in range(T):
+    for t in range(T): # T -- total time steps
         outputs, state = cell(inputs[:, t, :], state)
         z, v, thr = outputs
-
+        # append values to the created lists
         z_list.append(z)
         v_list.append(v)
         thr_list.append(thr)
         state_list.append(state)
-
+    # tf.stack -- Stacks a list of rank-R tensors into one rank-(R+1) tensor.
     zs = tf.stack(z_list, axis=1)
     vs = tf.stack(v_list, axis=1)
     thrs = tf.stack(thr_list, axis=1)
@@ -507,6 +507,7 @@ def static_rnn_with_gradient(cell, inputs, state, loss_function, T, verbose=True
         if t < T - 1:
             state = namedtuple_to_list(state_list[t])
             next_state = namedtuple_to_list(state_list[t + 1])
+            # tf.gradients -- Constructs symbolic derivatives of sum of ys w.r.t. x in xs
             de_dstate = tf.gradients(ys=next_state, xs=state, grad_ys=de_dstate)
 
             for k_var, de_dvar in enumerate(de_dstate):
