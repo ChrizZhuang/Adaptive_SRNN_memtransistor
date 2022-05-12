@@ -227,7 +227,7 @@ if not FLAGS.crs_thr and FLAGS.downsampled:
 else:
     inputs = input_pixels
 
-outputs, final_state = tf.nn.dynamic_rnn(cell, inputs, dtype=tf.float32)
+outputs, final_state = tf.compact.v1.nn.dynamic_rnn(cell, inputs, dtype=tf.float32)
 if FLAGS.model == 'LSNN':
     z, v, b = outputs
 else:
@@ -257,28 +257,30 @@ with tf.name_scope('ClassificationLoss'):
         Y_predict = outt[:, -1, :]  # shape batch x classes == n_batch x 10
     else:
         Y_predict = out[:, -1, :]  # shape batch x classes == n_batch x 10
-
-    loss_recall = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=targets, logits=Y_predict))
+    # tf.reduce_mean -- Computes the mean of elements across dimensions of a tensor.
+    loss_recall = tf.math.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=targets, logits=Y_predict))
 
     with tf.name_scope('PlotNodes'):
         out_plot = tf.nn.softmax(out)
 
-    # Define the accuracy
-    Y_predict_num = tf.argmax(Y_predict, axis=1)
-    accuracy = tf.reduce_mean(tf.cast(tf.equal(targets, Y_predict_num), dtype=tf.float32))
+    # Define the accuracy 
+    # tf.math.argmax -- Returns the index with the largest value across axes of a tensor.
+    Y_predict_num = tf.math.argmax(Y_predict, axis=1) 
+    # check if targets are equal to predicted Ys and map them from True/False to 1.0/0.0 and calculate the mean
+    accuracy = tf.math.reduce_mean(tf.cast(tf.equal(targets, Y_predict_num), dtype=tf.float32))
 
 # Target regularization
 with tf.name_scope('RegularizationLoss'):
     # Firing rate regularization
-    av = tf.reduce_mean(z, axis=(0, 1)) / dt
+    av = tf.math.reduce_mean(z, axis=(0, 1)) / dt
     regularization_f0 = FLAGS.reg_rate / 1000
-    loss_regularization = tf.reduce_sum(tf.square(av - regularization_f0)) * FLAGS.reg
+    loss_regularization = tf.math.reduce_sum(tf.square(av - regularization_f0)) * FLAGS.reg
 
 # Aggregate the losses
 with tf.name_scope('OptimizationScheme'):
     global_step = tf.Variable(0, dtype=tf.int32, trainable=False)
     learning_rate = tf.Variable(FLAGS.learning_rate, dtype=tf.float32, trainable=False)
-    decay_learning_rate_op = tf.assign(learning_rate, learning_rate * FLAGS.lr_decay)  # Op to decay learning rate
+    decay_learning_rate_op = tf.compat.v1.assign(learning_rate, learning_rate * FLAGS.lr_decay)  # Op to decay learning rate
 
     loss = loss_regularization + loss_recall
 
@@ -295,7 +297,7 @@ with tf.name_scope('OptimizationScheme'):
 
 # Real-time plotting
 saver = tf.train.Saver()
-sess = tf.Session()
+sess = tf.Session() # should modify this to tf2
 sess.run(tf.global_variables_initializer())
 
 if FLAGS.resume:
