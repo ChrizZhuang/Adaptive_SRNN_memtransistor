@@ -16,9 +16,9 @@ else:
     print("Using tensorflow version older then 2.8.0 -> skipping RefVariable storing")
     from tensorflow.python.ops.variables import Variable
 
-from lsnn.toolbox.rewiring_tools import weight_sampler
-from lsnn.toolbox.tensorflow_einsums.einsum_re_written import einsum_bi_ijk_to_bjk
-from lsnn.toolbox.tensorflow_utils import tf_roll
+from toolbox.rewiring_tools import weight_sampler
+from toolbox.tensorflow_einsums.einsum_re_written import einsum_bi_ijk_to_bjk
+from toolbox.tensorflow_utils import tf_roll
 
 from time import time
 
