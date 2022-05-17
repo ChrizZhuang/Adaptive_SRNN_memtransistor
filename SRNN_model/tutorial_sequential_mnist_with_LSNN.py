@@ -219,7 +219,8 @@ def get_data_dict(batch_size, type='train'):
     data_dict = {input_pixels: spike_stack, targets: target_num}
     return data_dict, input_px
 
-# 2022/05/11
+# crs_thr: Encode pixels to spikes with threshold crossing method
+# downsampled: whether to use the smaller downsampled mnist dataset of not (use pooling to shrink the size of image)
 if not FLAGS.crs_thr and FLAGS.downsampled:
     inputs = tf.reshape(input_pixels,[-1,28,28,1])
     inputs = tf.layers.average_pooling2d(inputs,pool_size=2,strides=2,name='DownSampleWithPool',padding='same')

@@ -103,9 +103,6 @@ def SpikeFunction(v_scaled, dampening_factor):
     # tf.identity : Return a Tensor with the same shape and contents as input.
     return tf.identity(z_, name="SpikeFunction"), grad
 
-def STDP():
-
-
 
 def weight_matrix_with_delay_dimension(w, d, n_delay):
     """
@@ -415,7 +412,9 @@ ALIFStateTuple = namedtuple('ALIFState', (
 
 
 class ALIF(LIF):
-    def __init__(self, n_in, n_rec, tau=20, thr=0.01,
+    def __init__(self, n_in, n_rec, w0, w_min, w_max, a_plus, a_plus_sign, a_minus, a_minus_sign, 
+                 b_plus, b_plus_sign, b_minus, b_minus_sign, 
+                 c_plus, c_plus_sign, c_minus,c_minus_sign, STDP_dev = 0.0, tau=20, thr=0.01,
                  dt=1., n_refractory=0, dtype=tf.float32, n_delay=1,
                  tau_adaptation=200., beta=1.6,
                  rewiring_connectivity=-1, dampening_factor=0.3,
@@ -452,6 +451,48 @@ class ALIF(LIF):
         if beta is None: raise ValueError("beta parameter for adaptive bias must be set")
 
         self.tau_adaptation = tf.Variable(tau_adaptation, dtype=dtype, name="TauAdaptation", trainable=False)
+
+         # Parameters for STDP weight update
+        self.w = np.random.normal(w0, w0*STDP_dev, n_in)
+        self.w_min = np.random.normal(w_min, w_min*STDP_dev, n_in)
+        self.w_max = np.random.normal(w_max, w_max*STDP_dev, n_in)
+
+        self.a_plus = np.random.normal(a_plus, a_plus*STDP_dev, n_in)
+        self.a_plus_sign = np.full(n_in, a_plus_sign)
+        self.a_minus = np.random.normal(a_minus, a_minus*STDP_dev, n_in)
+        self.a_minus_sign = np.full(n_in, a_minus_sign)
+
+        self.b_plus = np.random.normal(b_plus, b_plus*STDP_dev, n_in)
+        self.b_plus_sign = np.full(n_in, b_plus_sign)
+        self.b_minus = np.random.normal(b_minus, b_minus*STDP_dev, n_in)
+        self.b_minus_sign = np.full(n_in, b_minus_sign)
+
+        self.c_plus = np.random.normal(c_plus, c_plus*STDP_dev, n_in)
+        self.c_plus_sign = np.full(n_in, c_plus_sign)
+        self.c_minus = np.random.normal(c_minus, c_minus*STDP_dev, n_in)
+        self.c_minus_sign = np.full(n_in, c_minus_sign)
+
+        # Check to make sure all values are non negative and below max
+        for i in range(0, self.n_in):
+            # clip weight w within bounds
+            if (self.w[i] < self.w_min[i]):
+                self.w[i] = self.w_min[i]
+            elif (self.w[i] > self.w_max[i]):
+                self.w[i] = self.w_max[i]
+            
+            # weight update variables (a,b,c)+/- < 0 --> change to = 0
+            if (self.a_plus[i] < 0):
+                self.a_plus[i] = 0
+            if (self.a_minus[i] < 0):
+                self.a_minus[i] = 0
+            if (self.b_plus[i] < 0):
+                self.b_plus[i] = 0
+            if (self.b_minus[i] < 0):
+                self.b_minus[i] = 0
+            if (self.c_plus[i] < 0):
+                self.c_plus[i] = 0
+            if (self.c_minus[i] < 0):
+                self.c_minus[i] = 0
 
         self.beta = tf.Variable(beta, dtype=dtype, name="Beta", trainable=False)
         self.decay_b = np.exp(-dt / tau_adaptation) #pj in the equation
