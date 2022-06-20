@@ -38,8 +38,7 @@ G_min = tf.constant(float(input(" G_min: ")))
 
 t0 = 0
 
-# (TODO) - Step 2: read in the MNIST images and convert them to spike trains
-
+# Step 2: read in the MNIST images and convert them to spike trains
 def load_training_set(mnist_directory, training_size):
     """
     Load the MNIST digits for training. Shuffles them as well.
@@ -51,7 +50,7 @@ def load_training_set(mnist_directory, training_size):
         training_set - np.array: training_set of randomly selected images from MNIST with size of training_size
     """
     # Sanity checks
-    assert(type(mnist_directory) == string), "Parameter mnist_directory must be a string!"
+    assert(type(mnist_directory) == str), "Parameter mnist_directory must be a string!"
     assert(type(training_size) == int), "Parameter training_size must be an int!"
     assert(training_size >=0 and training_size <= 60000), "Parameter training_size must >= 0 and <= 60000!"
 
@@ -101,7 +100,7 @@ def find_onset_offset(y, threshold):
     y must be 1-D numpy arrays.
     """
     # Sanity check
-    assert (len(np.array(threshold)) == 1), "The length of threshold should be 1!"
+    #assert (len(np.array(threshold)) == 1), "The length of threshold should be 1!"
 
     if threshold == 255:
         equal = y == threshold
@@ -134,7 +133,7 @@ def generate_spike_train_from_image(image, n_inputs = 80):
         spike_train_image: spike train of a given image
     """
     # Sanity check
-    assert(type(image) == np.array), "Parameter image should be a np.array!"
+    assert(type(image) == np.ndarray), "Parameter image should be a np.array!"
     assert(type(n_inputs) == int), "Parameter n_inputs should be an int!"
 
     # turn the image into a 1D array
@@ -169,7 +168,7 @@ def image_process_pipeline(mnist_directory, training_size):
         spike_trains_training_set.append(generate_spike_train_from_image(image))
 
     return np.array(spike_trains_training_set)
-
+    
 # (TODO) - Step 3: define the model
 # (TODO) - Step 4: fit the model
 # (TODO) - Step 5: test and calculate the accuracy  
