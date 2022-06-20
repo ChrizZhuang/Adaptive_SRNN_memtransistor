@@ -4,3 +4,4 @@
 
 ### Reference repositories
 - LSNN: https://github.com/IGITUGraz/LSNN-official
+- AHP neuron (encode MNIST image to spike trains): https://github.com/intel-nrc-ecosystem/models
