@@ -1,8 +1,8 @@
-import string
 import tensorflow as tf
 import numpy as np
-import time 
-import pickle, gzip, os, sys, signal
+import pickle, gzip
+import SRNN_develop.ipynb as SRNN_func
+
 
 # (TODO) - Step 1: define some constants
 
@@ -168,7 +168,7 @@ def image_process_pipeline(mnist_directory, training_size):
         spike_trains_training_set.append(generate_spike_train_from_image(image))
 
     return np.array(spike_trains_training_set)
-    
+
 # (TODO) - Step 3: define the model
 # (TODO) - Step 4: fit the model
 # (TODO) - Step 5: test and calculate the accuracy  
